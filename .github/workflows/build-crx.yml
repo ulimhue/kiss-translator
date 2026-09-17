@@ -1,0 +1,36 @@
+name: Build CRX
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.14.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - run: pnpm install
+
+      - name: Build Chrome Extension
+        run: pnpm build:chrome
+
+      - name: Save private key from secret
+        run: echo "${{ secrets.CRX_PRIVATE_KEY }}" > private-key.pem
+
+      - name: Pack CRX
+        run: npx crx pack build/chrome -o build/kiss-translator.crx -p private-key.pem
+
+      - name: Upload CRX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiss-translator-crx
+          path: build/kiss-translator.crx
