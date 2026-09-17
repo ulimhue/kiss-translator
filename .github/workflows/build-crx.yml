@@ -24,7 +24,7 @@ jobs:
         run: pnpm build:chrome
 
       - name: Save private key from secret
-        run: echo "${{ secrets.CRX_PRIVATE_KEY }}" > private-key.pem
+        run: echo "${{ secrets.CRX_PRIVATE_KEY }}" | base64 -d > private-key.pem
 
       - name: Pack CRX
         run: npx crx pack build/chrome -o build/kiss-translator.crx -p private-key.pem
