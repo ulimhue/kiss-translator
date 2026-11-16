@@ -1,0 +1,51 @@
+name: build crx
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 9.14.4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:chrome
+      - name: Pack signed crx
+        id: pack
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          manifest_version=$(node -p "require('./build/chrome/manifest.json').version")
+          if [ "$version" != "$manifest_version" ]; then
+            echo "::error::package.json ($version) 与 build/chrome/manifest.json ($manifest_version) 版本不一致"
+            exit 1
+          fi
+          if [ -z "${CRX_PRIVATE_KEY:-}" ]; then
+            echo "::error::缺少仓库 secret CRX_PRIVATE_KEY（crx 私钥 PEM 的 base64）"
+            exit 1
+          fi
+          key_file=$(mktemp)
+          printf '%s' "$CRX_PRIVATE_KEY" | base64 -d > "$key_file"
+          if [ "$(head -c 10 "$key_file")" != "-----BEGIN" ]; then
+            echo "::error::CRX_PRIVATE_KEY 不是 PEM 私钥的 base64"
+            exit 1
+          fi
+          npx --yes crx3@2.0.0 -p "$key_file" -o "build/kiss-translator-${version}.crx" build/chrome
+          rm -f "$key_file"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: build/kiss-translator-${{ steps.pack.outputs.version }}.crx
+          archive: false
